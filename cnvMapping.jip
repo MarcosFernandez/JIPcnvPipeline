@@ -1,0 +1,46 @@
+#!/usr/bin/env jip
+# Run gemtools on a given input file with a preconfigured pipeline
+#
+# Usage:
+#   cnvMapping.jip -f <input> -i <index> -l <output_dir> -n <clean_name> -o <cnv_mapping_sam> -m <mismatches> -e <edit_distance> -s <strata> 
+#   -d <max_d_match> -z <min_d_strata> -t <threads>  [-p <prefix>]
+#
+# Inputs:
+#  -i, --index <index>      Genome index file to be used
+#  -l, --output_dir <output_dir>    Output directory
+#
+# Options:
+#  -f, --input <input>      Fastq file to be mapped
+#  -p,--prefix <prefix>                Prefix used for jobs
+#  -n,--clean_name <clean_name>        Clean Name
+#  -m,--mismatches <mismatches>        The maximum number of nucleotide substitutions allowed while mapping each read
+#  -e,--edit_distance                  The maximum number of edit operations allowed
+#  -s,--strata <strata>                Number of stratas to be explored after the best one
+#  -d,--max_d_match <max_d_match>      Max number of matches to report 
+#  -z,--min_d_strata <min_d_strata>    Minimum number of matches belonging to a number of strata
+#  -t,--threads <threads>              Threads
+#
+# Outputs:
+#   -o,--cnv_mapping_sam <cnv_mapping_sam>  CNV Mapping file output
+
+#%begin validate
+
+#Guess a name
+import os
+_name = ""
+try:
+    _name = os.path.basename(args['input']).replace(".fq", ""); 
+except:
+    pass
+
+#set job
+pref = opts['prefix'].get()
+if pref and not pref[-1] == '-':
+    pref = pref + '-'
+name(pref + _name)
+
+
+#%end
+
+gemtools-cnv cnv-mapping -f ${input} -i ${index} -n ${clean_name}  --mappin-stats-json -o ${output_dir} -m ${mismatches} -e ${edit_distance} -s ${strata} -d ${max_d_match} -D ${min_d_strata} -T ${threads}
+

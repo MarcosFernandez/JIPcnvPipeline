@@ -1,0 +1,69 @@
+#!/usr/bin/env jip
+# Run gemtools on a given input file with a preconfigured pipeline
+#
+# Usage:
+#  basicMapping.jip -f <bwa_reference> -i <input> -d <description> -o <base_mapping_bam> -l <output_dir> -r <picard_tools> -t <tmp_folder> 
+#                   -c <threads> [-p <prefix>] [--single_end]
+#
+# Inputs:
+#  -f, --bwa_reference <bwa_reference>    Fasta file, in its folder must be found BWA index files
+#  -i, --input <input>                    The first name fastq input file
+#  -l, --output_dir <output_dir>          Output directory
+#
+# Options:
+#  -p,--prefix <prefix>                   Prefix used for jobs
+#  -d,--description <description>         Sample Description
+#  -r,--picard_tools <picard_tools>       Picard Tools installation
+#  -t,--tmp_folder <tmp_folder>           Temporal path of the machine where the job is being to be run
+#  -c,--threads <threads>                 Threads to perform the mapping job
+#  --single_end                           Activate this option in case bam input is in Single end
+#                                         [default: false]
+#
+# Outputs:
+#   -o,--base_mapping_bam <base_mapping_bam>  Base Mapping file output
+
+#%begin validate
+
+#Guess a name
+import os
+_name = ""
+try:
+    _name = os.path.basename(args['input']) 
+    _name = _name[:_name.index(".")-2]
+except:
+    pass
+
+#set job
+pref = opts['prefix'].get()
+if pref and not pref[-1] == '-':
+    pref = pref + '-'
+name(pref + _name)
+
+# add output files but make them sticky. The pipeline
+# in gemtools takes care of deleting failed files
+#add_output('base_mapping_bam',"./base-mapping/%s.bam" %_name,hidden=False,sticky=True)
+
+add_output('base_mapping_report_txt',args['output_dir'] + "/base-mapping-report/%s_base-mapping-report.txt" %_name,sticky=True)
+add_output('base_mapping_report_html',args['output_dir'] + "/base-mapping-report/%s_base-mapping-report.html" %_name,sticky=True)
+add_output('base_mapping_report_json',args['output_dir'] + "/base-mapping-report/%s_base-mapping-report.json" %_name,sticky=True)
+
+#%end
+
+se=`echo ${single_end|arg("yes")|else("no")}`
+
+if [ "$se" == "yes" ];
+then 
+    gemtools-cnv basic-mapping -f ${input} -bwa-ref ${bwa_reference} -T ${threads} -sample-description ${description} -picard-path ${picard_tools} -tmp-folder ${tmp_folder} -o ${output_dir} --single-end
+else
+    gemtools-cnv basic-mapping -f ${input} -bwa-ref ${bwa_reference} -T ${threads} -sample-description ${description} -picard-path ${picard_tools} -tmp-folder ${tmp_folder} -o ${output_dir} 
+fi
+
+ 
+
+
+    
+     
+    
+
+
+

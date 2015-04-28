@@ -1,0 +1,74 @@
+#!/usr/bin/env jip
+# Run the cnv_assembly_preparation
+#
+# usage:
+#     cnv_assembly_preparation.jip -f <fasta> -t <threads> -r <repeats>... -g <gap> -a <chr_len> -o <output_dir> [-k <kmer_hits>] [-l <lw_size>] [-L <lw_slide>] [-s <sw_size>] [-S <sw_slide>] [-c <cw_size>]
+#
+# inputs:
+#  -f, --fasta <fasta>                              Fasta raw file
+#  -r, --repeats <repeats>...                       List of bed files representing repeat regions (Simple repeats, Tandem repeats,...)
+#  -g, --gap <gap>                                  GAP bed file
+#  -a, --chr_len <chr_len>                          Chromsome lengths file
+#  -o, --output_dir <output_dir>                    Output directory
+#
+# Options:
+#  -k, --kmer_hits <kmer_hits>                      Number of hits to consider a region as over represented [default: 20]
+#  -t, --threads <threads>                          Number of threads
+#  -p, --prefix <prefix>                            Optional job prefix
+#                                                   but use the current working dir
+#                                                   [default: false]
+#   -l, --lw_size <lw_size>                         Long window span size. [default: 5000]
+#   -L, --lw_slide <lw_slide>                       Long window slide size. [default: 1000]
+#   -s, --sw_size <sw_size>                         Short window span size. [default: 1000]
+#   -S, --sw_slide <sw_slide>                       Short window slide size. [default: 1000]
+#   -c, --cw_size <cw_size>                         Copy number window size. [default: 1000]
+
+
+#%begin pipeline
+import os
+import os.path
+import json
+import sys
+
+#0.1 GET REFERENCE BASENAME
+_name = basename(args['fasta']) 
+name = _name[:_name.index(".")]
+
+#0.2 Path standard error standard output
+pathOutErr=args['output_dir'] + "/out_mn/"
+if not os.path.exists(pathOutErr):
+    os.makedirs(pathOutErr)
+
+
+#1. BWA INDEX
+bwa_index = job("bwa-index" + name, time="06:00:00",\
+                 log=pathOutErr + "bwa_index_" + name + ".err",\
+                 out=pathOutErr + "bwa_index_" + name + ".out").\
+                 run('bwaIndex',bwa_reference=args['fasta'],output_dir=args['output_dir'])
+
+
+
+#2. MASKING THE REFERENCE
+outputFasta=args['output_dir'] + "/padded-fasta/%s_pad36_padded-fasta.fa" %name
+
+gemtools = job("gemtools_" + name,time="23:59:59",threads=args['threads'],\
+                log=pathOutErr + "gemtools_" + name + ".err",\
+                out=pathOutErr + "gemtools_" + name + ".out").\
+                run('assemblyMasking',fasta=args['fasta'],threads=args['threads'],repeats=args['repeats'],gap=args['gap'],chr_len=args['chr_len'],\
+                    kmer_hits=args['kmer_hits'],output_dir=args['output_dir'],pad_mask_fa=outputFasta) 
+
+
+#3. CANAVAR CONFIGURATION
+cnv_prep = job("prep_" + name,time="02:59:59",threads=1,\
+                log=pathOutErr + "prep_" + name + ".err",\
+                out=pathOutErr + "prep_" + name + ".out").\
+                run('cnvPrep',padded_reference=gemtools.pad_mask_fa,gaps=args['gap'],lw_size=args['lw_size'], lw_slide=args['lw_slide'],\
+                     sw_size=args['sw_size'], sw_slide=args['sw_slide'],cw_size=args['cw_size'])
+
+
+
+
+
+
+
+

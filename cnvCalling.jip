@@ -1,0 +1,40 @@
+#!/usr/bin/env jip
+# Run gemtools on a given input file with a preconfigured pipeline
+#
+# Usage:
+#    cnvCalling.jip -d <mapsDirectory> -c <canavarBinary> -r <referenceConf> -s <sampleDescription> -l <listJson> -o <output_dir> -n <name> [-p <prefix>]
+# 
+# Inputs:
+#  -c, --canavarBinary <canavarBinary>           Mr Canavar binary file
+#  -r, --referenceConf <referenceConf>           Reference configuration file from mrcanavar prep step
+#  -o, --output_dir <output_dir>                 Output directory
+#
+# Options:
+#  -d, --mapsDirectory <mapsDirectory>           Directory were are store SAM mapping files
+#  -p, --prefix <prefix>                         Prefix used for jobs
+#  -n, --name <name>                             Name ot he sample  
+#  -s, --sampleDescription <sampleDescription>   Sample Description
+#  -l, --listJson <listJson>                     List JSON files
+
+
+#%begin validate
+
+#set job
+pref = opts['prefix'].get()
+if pref and not pref[-1] == '-':
+    pref = pref + '-'
+name(pref + args['sampleDescription'])
+
+# add output files but make them sticky. The pipeline
+# in gemtools takes care of deleting failed files
+#add_output('mrcanavar-calls',"./mrcanavar/%s.calls" %args['sampleDescription'],sticky=True)
+
+add_output('copy_number_bed',args['output_dir'] + "/mrcanavar/%s_mrcanavar.calls.copynumber.bed" %args['name'])
+add_output('html_doc',args['output_dir'] + "/html-doc/%s_html-doc.html" %args['name'])
+
+#%end
+
+module load R/3.1.0
+
+gemtools-cnv cnv-call -d ${mapsDirectory} -mrcanavar-path ${canavarBinary} --conf_file ${referenceConf} --gz --no-duplications -sample-description ${sampleDescription} -n ${name} -o ${output_dir} -j ${listJson}
+

@@ -1,0 +1,52 @@
+#!/usr/bin/env jip
+# Assembly Masking
+#
+# Usage:
+#  assemblyMasking.jip -f <fasta> -t <threads> -r <repeats>... -g <gap> -l <chr_len> -k <kmer_hits>  -d <output_dir> -o <pad_mask_fa> [-p <prefix>]
+#
+# Inputs:
+#  -f, --fasta <fasta>                              Fasta raw file
+#  -r, --repeats <repeats>...                       List of bed files representing repeat regions (Simple repeats, Tandem repeats,...)
+#  -g, --gap <gap>                                  GAP bed file
+#  -l, --chr_len <chr_len>                          Chromosome lengths file
+#  -d, --output_dir <output_dir>                    Output directory
+#
+# Options:
+#  -k, --kmer_hits <kmer_hits>                      Number of hits to consider a region as over represented [default: 20]
+#  -t, --threads <threads>                          Threads
+#  -p, --prefix <prefix>                            Optional job prefix
+#                                                   but use the current working dir
+#                                                   [default: false]
+# Outputs:
+#  -o, --pad_mask_fa <pad_mask_fa>                  Padded masked fasta file
+
+#%begin validate
+
+#Guess a name
+import os
+_name = ""
+try:
+    _name = os.path.basename(args['fasta']) 
+    _name = _name[:_name.index(".")-2]
+except:
+    pass
+
+#set job
+pref = opts['prefix'].get()
+if pref and not pref[-1] == '-':
+    pref = pref + '-'
+name(pref + _name)
+
+#%end
+
+module load R/3.1.0
+
+repeatsList=""
+
+for bed in ${repeats};
+do
+     repeatsList=${repeatsList}" "$bed
+done
+
+gemtools-cnv cnv-assembly-preparation -f ${fasta} -t ${threads} --bed-regions ${repeatsList} --chr-len ${chr_len} -kmer-mappings-threshold ${kmer_hits}
+

@@ -1,0 +1,282 @@
+#!/usr/bin/env jip
+# Run the full CNV mapping pipeline
+#
+# usage:
+#     cnv_pipeline.jip -c <configuration> -i <input>... -o <output_dir> -n <name>  -d <description> [-p <prefix>] [--gz]
+#
+# inputs:
+#  -c, --configuration <configuration>              Configuration file
+#  -i, --input <input>...                           List of fastq input files, in case of paired en just insert first pair file
+#  -o, --output_dir <output_dir>                    Output directory
+#
+# Options:
+#  -n, --name <name>                                Sample Name
+#  -p, --prefix <prefix>                            Optional job prefix
+#                                                   but use the current working dir
+#  -d, --description <description>                  Sample Description
+#  --gz                                             Activate this option in case fastq input is gzip compressed
+#                                                   [default: false]
+
+
+#%begin pipeline
+import os
+import os.path
+import json
+import sys
+
+def parserJsonFile(jsonFile):
+    '''Parser a json file and retorns a dictionary
+    Parameters:
+    jsonFile -- Path to the json file configuration
+    Returns: Dictionary json representation
+    '''
+    import json
+    with open(jsonFile) as json_file:
+        return json.load(json_file)
+
+# guess the root folder of the project
+#base = dirname(dirname(__file__)) if not no_search else pwd
+base = pwd
+
+if not prefix:
+    pfx = basename(base)
+else:
+    pfx = prefix
+
+_name = ""
+try:
+    _name = basename(args['input'])
+    _name = _name[:_name.index(".") - 2]
+    pfx = "%s-%s" % (pfx, _name)
+    name(pfx)
+except:
+    pass
+
+fastqGzip = False
+
+if args['gz']:
+    fastqGzip = True
+
+dir_out = "";
+  
+
+#0.COMMON VARIABLES
+#0.1 Path standard error standard output
+pathOutErr=output_dir + "/out_mn/"
+if not os.path.exists(pathOutErr):
+    os.makedirs(pathOutErr)
+
+
+
+#0.2 Load configuration json file on cfg dictionary
+cfg = parserJsonFile(args['configuration'])
+
+#0.3 General name
+sample = args['name']
+#0.4 Output Directory
+dir_out = args['output_dir']
+#0.5 Do Remove Duplicates treatment
+pipeline_remove_dup = cfg["Pipeline"]["run_pcr_duplicates"]
+
+single_end = cfg["Pipeline"]["input_data_se"]
+
+##########################################################################################################################################################
+##########################################################REMOVE DUPLICATES PART #########################################################################
+##########################################################################################################################################################
+
+if pipeline_remove_dup:
+    
+    picard_path = cfg["Bwa"]["picard_path"]
+    tmp_folder = cfg["Bwa"]["tmp_folder"]
+    
+    #1. BASIC MAPPING ONE JOB PER LANE
+    lane_jobs = []
+    for fastq in args['input']:
+        if single_end:
+            _name = os.path.basename(fastq)
+            if _name.endswith(".gz"):
+                _name = name[:-3]
+            idx = _name.rfind(".")
+            if idx > 0:
+                _name = _name[:idx]
+            output = dir_out + "/base-mapping/" +  _name + ".bam"
+            basic_mapping = job("basic_map_" + _name,time=cfg["Bwa"]["bwa_time_job"],threads=cfg["Bwa"]["bwa_threads"],
+                            temp=True,log=pathOutErr + "basic_map_" + _name + ".err",\
+                            out=pathOutErr + "basic_map_" + _name + ".out").\
+                            run('basicMapping',bwa_reference=cfg["Bwa"]["bwa_reference"],description=sample,\
+                            picard_tools=picard_path,tmp_folder=tmp_folder,\
+                            threads=cfg["Bwa"]["bwa_threads"], \
+                            input=fastq,base_mapping_bam=output,output_dir=dir_out,single_end=True)
+            lane_jobs.append(basic_mapping)
+        else:
+            _name = os.path.basename(fastq)
+            _name = _name[:_name.index(".")-2] 
+            output = dir_out + "/base-mapping/" +  _name + ".bam"
+            basic_mapping = job("basic_map_" + _name,time=cfg["Bwa"]["bwa_time_job"],threads=cfg["Bwa"]["bwa_threads"],
+                            temp=True,log=pathOutErr + "basic_map_" + _name + ".err",\
+                            out=pathOutErr + "basic_map_" + _name + ".out").\
+                            run('basicMapping',bwa_reference=cfg["Bwa"]["bwa_reference"],description=sample,\
+                               picard_tools=picard_path,tmp_folder=tmp_folder,\
+                               threads=cfg["Bwa"]["bwa_threads"], \
+                               input=fastq,base_mapping_bam=output,output_dir=dir_out)
+            lane_jobs.append(basic_mapping)
+                            
+    
+    #2. REMOVE DUPLICATES JOB
+    basic_bams = []
+    for basic_map_jobs in lane_jobs:
+        basic_bams.append(basic_map_jobs.base_mapping_bam)
+        
+    output = dir_out + "/rm-dups/" + sample  + "_rm-dups.rmdup.bam" 
+    remove_duplicates = job('remove_duplicates_' + sample,time=cfg["Bwa"]["mark_dup_time_job"],threads=cfg["Bwa"]["mark_dup_threads"],\
+                             temp=True,log=pathOutErr + "remove_duplicates_" + _name + ".err",\
+                             out=pathOutErr + "remove_duplicates_" + _name + ".out").\
+                             run('removeDuplicates',input=basic_bams,library_name=sample,duplicates_bam=output,output_dir=dir_out,\
+                             picard_tools=picard_path,tmp_folder=tmp_folder,java_heap=cfg["Bwa"]["java_heap"])
+
+##########################################################################################################################################################
+#####################################################     CNV PIPELINE           #########################################################################
+##########################################################################################################################################################
+
+
+#3. FRAGMENTATION
+chunks = int(cfg["Fragment"]["chunks"])
+klen = cfg["Fragment"]["kmer_length"]
+win = cfg["Fragment"]["windowing"]
+f_pos = cfg["Fragment"]["first_position"]
+fragmentJob = None
+
+#3.1 Define Outputs
+outputList = []
+fragmentJobs = []
+
+#3.2 Fragmentation Job
+if pipeline_remove_dup:
+    #3.2.1 If Remove Duplicates parts was applied then we must transform the Bam to FASTQ to later perform the FASTQ fragmentation
+    bam_fq_time = cfg["Fragment"]["bam_to_fastq_time_job"]
+    bam_fq_threads = cfg["Fragment"]["bam_to_fastq_threads"]
+       
+    if not single_end:
+        jobOutputList = []
+        for fragment in range(1,chunks+1):
+            jobOutputList.append(dir_out + "/chop-reads/" + sample +"_chop-reads.part-" + str(fragment) + ".1.fq")
+            jobOutputList.append(dir_out + "/chop-reads/" + sample +"_chop-reads.part-" + str(fragment) + ".2.fq")
+
+        fragmentJob = job('bam2fastq_'+ sample,time=bam_fq_time,threads=bam_fq_threads,\
+                     temp=True,log=pathOutErr + "bam2fastq_" + sample + ".err",\
+                     out=pathOutErr + "bam2fastq_" + sample + ".out").\
+                     run('bamToFastq',input= remove_duplicates.duplicates_bam,library_name=sample,threads=bam_fq_threads,\
+                     split_times=chunks,kmer_length=klen,windowing=win,first_position=f_pos,outList=jobOutputList,output_dir=dir_out)
+        fragmentJobs.append(fragmentJob) 
+        outputList.extend(jobOutputList)
+    else:
+        jobOutputList = []
+        for fragment in range(1,chunks+1):
+            jobOutputList.append(dir_out + "/chop-reads/" + sample +"_chop-reads.part-" + str(fragment) + ".fq")
+
+        fragmentJob = job('bam2fastq_'+ sample,time=bam_fq_time,threads=bam_fq_threads,temp=True,\
+                     log=pathOutErr + "bam2fastq_" + sample + ".err",\
+                     out=pathOutErr + "bam2fastq_" + sample + ".out").\
+                     run('bamToFastq',input=remove_duplicates.duplicates_bam,library_name=sample,threads=bam_fq_threads,\
+                     split_times=chunks,kmer_length=klen,windowing=win,first_position=f_pos,single_end=True,outList=jobOutputList,output_dir=dir_out)
+        fragmentJobs.append(fragmentJob)
+        outputList.extend(jobOutputList)
+else:
+    #3.2.2 If no remove duplicates process was applied then treat directly FASTQ input data 
+    frag_threads = cfg["Fragment"]["fragmentation_threads"] 
+    frag_time = cfg["Fragment"]["frag_and_chop_time_job"]
+
+    for fastq in args['input']:
+        _name = os.path.basename(fastq)
+        _name = _name[:_name.index(".")-2] 
+
+        if not single_end:
+            jobOutputList = []
+            for fragment in range(1,chunks+1):
+                jobOutputList.append(dir_out + "/chop-reads/" + _name +"_chop-reads.part-" + str(fragment) + ".1.fq")
+                jobOutputList.append(dir_out + "/chop-reads/" + _name +"_chop-reads.part-" + str(fragment) + ".2.fq")
+
+            fragmentJob = job('fastqSplitChop_'+ _name,time=frag_time,threads=frag_threads,temp=True,\
+                         log=pathOutErr + "fastqSplitChop_" + _name + ".err",\
+                         out=pathOutErr + "fastqSplitChop_" + _name + ".out").\
+                         run('fastqSplitChop',input=fastq,library_name=_name,threads=frag_threads,\
+                         split_times=chunks,kmer_length=klen,windowing=win,first_position=f_pos,\
+                         outList=jobOutputList,output_dir=dir_out,gz=fastqGzip)
+            fragmentJobs.append(fragmentJob)
+            outputList.extend(jobOutputList)
+        else:
+            jobOutputList = []
+            for fragment in range(1,chunks+1):
+                jobOutputList.append(dir_out + "/chop-reads/" + _name +"_chop-reads.part-" + str(fragment) + ".fq")
+
+            fragmentJob = job('fastqSplitChop_'+ _name,time=frag_time,threads=frag_threads,temp=True,\
+                         log=pathOutErr + "fastqSplitChop_" + _name + ".err",\
+                         out=pathOutErr + "fastqSplitChop_" + _name + ".out").\
+                         run('fastqSplitChop',input=fastq,library_name=_name,threads=frag_threads,\
+                         split_times=chunks,kmer_length=klen,windowing=win,first_position=f_pos,\
+                         single_end=True,outList=jobOutputList,output_dir=dir_out,gz=fastqGzip)
+            fragmentJobs.append(fragmentJob)
+            outputList.extend(jobOutputList)
+
+#4. CNV MAPPING
+
+#4.1 Configuration Parameters
+gem_m = cfg["CnvMapping"]["mismatches"]
+gem_time = cfg["CnvMapping"]["gem_time_job"] 
+gem_s = cfg["CnvMapping"]["strata_after_best"]
+gem_i = cfg["CnvMapping"]["gem_index"]
+gem_d = cfg["CnvMapping"]["max_decoded_matches"] 
+gem_t = cfg["CnvMapping"]["gem_threads"]
+gem_D = cfg["CnvMapping"]["min_decoded_strata"] 
+gem_e = cfg["CnvMapping"]["max_edit_distance"]
+
+
+cnv_mapping_jobs = []
+
+#4.2 CNV Mapping Job
+for i in outputList:
+    fragment = i
+    _name = os.path.basename(fragment) 
+    _name = _name[:_name.index(".")]
+
+    output = dir_out + "/map-sam/%s_map-sam.sam.gz" %os.path.basename(fragment).replace(".fq", "")
+    clean_name=os.path.basename(fragment).replace(".fq", "")
+
+    cnv_mapping = job('cnv_mapping_' + _name,time=gem_time,threads=gem_t,temp=True,\
+                  log=pathOutErr + "cnv_mapping_" + clean_name + ".err",\
+                  out=pathOutErr + "cnv_mapping_" + clean_name + ".out").\
+                  run('cnvMapping', input=fragment, index=gem_i,\
+                      cnv_mapping_sam=output,output_dir=dir_out,\
+                      mismatches=gem_m,edit_distance=gem_e, \
+                      strata=gem_s,max_d_match=gem_d, \
+                      min_d_strata=gem_D,threads=gem_t, \
+                      clean_name=clean_name)
+    for fragmentJob  in fragmentJobs:
+        cnv_mapping.depends_on(fragmentJob)
+    cnv_mapping_jobs.append(cnv_mapping)
+
+#5. CNV CALLING
+#5.1 Define JSON Outputs
+jsonStatsList = []
+for fqFile in outputList:
+    _name = os.path.basename(fqFile).replace(".fq","") 
+    jsonStatsList.append(dir_out + "/map-stats/%s.stats.json" %_name)
+    
+#5.2 CNV Calling
+cnv_conf = cfg["CnvCalling"]["reference_conf"]
+cnv_time = cfg["CnvCalling"]["cnv_call_time_job"]
+cnv_threads = cfg["CnvCalling"]["cnv_threads"]
+
+cnv_calling = job('cnv_calling_' + _name,time=cnv_time,threads=cnv_threads,\
+    log=pathOutErr + "cnv_calling_" + sample + ".err",\
+    out=pathOutErr + "cnv_calling_" + sample + ".out").\
+    run('cnvCalling',mapsDirectory=dir_out + "/map-sam/",canavarBinary="/home/devel/mfernand/bin/mrcanavar0.51",\
+    sampleDescription=args['description'],name=sample,referenceConf=cnv_conf,listJson=" ".join(jsonStatsList),output_dir=dir_out)
+
+for mapJob in cnv_mapping_jobs:
+    cnv_calling.depends_on(mapJob)
+
+#%end 
+
+
+

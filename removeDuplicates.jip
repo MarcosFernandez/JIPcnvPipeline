@@ -1,0 +1,36 @@
+#!/usr/bin/env jip
+# Remove Duplicates, remove duplicates from a set of bam files all coming from the same library
+#
+# Usage:
+#  removeDuplicates.jip -i <input>... -l <library_name> -o <duplicates_bam> -d <output_dir> -r <picard_tools> -t <tmp_folder> -j <java_heap> [-p <prefix>] 
+#
+# Inputs:
+#  -i, --input <input>...     List of bams, all of them for the same library to be processed removing PCR artefacts
+#  -d, --output_dir <output_dir>    Output directory
+#
+# Options:
+#  -p,--prefix <prefix>                    Prefix used for jobs
+#  -l,--library_name <library_name>        Library name
+#  -r,--picard_tools <picard_tools>        Picard Tools installation
+#  -t,--tmp_folder <tmp_folder>            Temporal path of the machine where the job is being to be run
+#  -j,--java_heap <java_heap>              Java Heap memory stack
+#
+# Outputs:
+#  -o,--duplicates_bam <duplicates_bam>    Remove duplicates output bam file
+
+#%begin validate
+
+#set job
+pref = opts['prefix'].get()
+if pref and not pref[-1] == '-':
+    pref = pref + '-'
+name(pref + args['library_name'])
+
+
+#%end
+gemtools-cnv remove-duplicates -f ${input} -picard-path ${picard_tools} -java-heap ${java_heap} -tmp-folder ${tmp_folder} -sample-description ${library_name} -o ${output_dir}
+
+ 
+    
+    
+

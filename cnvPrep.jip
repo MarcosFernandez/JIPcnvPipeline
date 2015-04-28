@@ -1,0 +1,41 @@
+#!/usr/bin/env jip
+# cnvPrep.jip Run gemtools cnv-prep to build canavar preparation file
+#
+# Usage:
+#  cnvPrep.jip -r <padded_reference> -g <gaps> [-p <prefix>] [-l <lw_size>] [-L <lw_slide>] [-s <sw_size>] [-S <sw_slide>] [-c <cw_size>]
+#
+# Inputs:
+#  -r, --padded_reference <padded_reference>	Padded fasta reference
+#  -g, --gaps <gaps>          			Gap bed file
+# 
+# Options:
+#   -l, --lw_size <lw_size>                     Long window span size. [default: 5000]
+#   -L, --lw_slide <lw_slide>                   Long window slide size. [default: 1000]
+#   -s, --sw_size <sw_size>                     Short window span size. [default: 1000]
+#   -S, --sw_slide <sw_slide>                   Short window slide size. [default: 1000]
+#   -c, --cw_size <cw_size>                     Copy number window size. [default: 1000]
+#   -p, --prefix <prefix>                       Optional job prefix
+#                                               but use the current working dir
+#                                               [default: false]
+#
+
+#%begin validate
+
+#Guess a name
+import os
+_name = ""
+try:
+    _name = os.path.basename(args['bwa_reference']) 
+    _name = _name[:_name.index(".")-2]
+except:
+    pass
+
+#set job
+pref = opts['prefix'].get()
+if pref and not pref[-1] == '-':
+    pref = pref + '-'
+name(pref + _name)
+
+#%end
+
+gemtools-cnv cnv-prep -f ${padded_reference} -g ${gaps} -l ${lw_size} -L ${lw_slide} -s ${sw_size} -S ${sw_slide} -c ${cw_size}

@@ -1,0 +1,54 @@
+#!/usr/bin/env jip
+# Run gemtools bam to fastq tool
+#
+# Usage:
+#   bamToFastq.jip -i <input> -l <library_name> -s <split_times> -k <kmer_length> -w <windowing> -f <first_position> 
+#                  -t <threads> -o <outList>... -d <output_dir> [-p <prefix>] [--single_end]
+#
+# Inputs:
+#  -i, --input <input>     Bam file to be tranformed to a set of chopped reads 
+#  -d, --output_dir <output_dir>                Output directory
+#
+# Options:
+#  -p,--prefix <prefix>                  Prefix used for jobs
+#  -l,--library_name <library_name>      Library name
+#  --single_end                          Activate this option in case bam input is in Single end
+#                                        [default: false]
+#  -s,--split_times <split_times>        Number of times to split the set of sequencing reads.
+#  -k,--kmer_length <kmer_length>        Reads must be chopped to a given size. 
+#  -w,--windowing <windowing>            While chopping reads you can specify a bp window sliding, if you are not interested in any overlap leave this value as the kmer-length.
+#  -f,--first_position <first_position>  Position to start chopping your reads, if you are detecting bad patterns at the begining of the reads you can remove such bases. 
+#                                        As a filtering criteria.
+#  -t,--threads <threads>                Number of threads
+#
+# Outputs:
+#   -o,--outList <outList>               List of outputs
+
+
+#%begin validate
+
+#set job
+pref = opts['prefix'].get()
+if pref and not pref[-1] == '-':
+    pref = pref + '-'
+name(pref + args['library_name'])
+
+#%end
+
+se=`echo ${single_end|arg("yes")|else("no")}`
+
+if [ "$se" == "yes" ];
+then 
+    gemtools-cnv bam-2-fastq  --single-end -f ${input} -split-times ${split_times} -kmer-length ${kmer_length} -windowing ${windowing} -first-position ${first_position} -n ${library_name} -o ${output_dir} --threads ${threads}
+else
+    gemtools-cnv bam-2-fastq  -f ${input} -split-times ${split_times} -kmer-length ${kmer_length} -windowing ${windowing} -first-position ${first_position} -n ${library_name} -o ${output_dir} --threads ${threads}
+fi
+
+
+
+
+
+
+
+
+
