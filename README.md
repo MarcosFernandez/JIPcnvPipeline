@@ -20,7 +20,7 @@ Download all scripts and save them at the same folder. That's It.
 Documentation
 =============
 
-Documentation can be found at
+Documentation can be found at [JIP Pipeline Scripts] (http://statgen.cnag.cat/docgemtoolscnv/jip/index.html)
 
 
 Changelog:
