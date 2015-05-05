@@ -41,7 +41,7 @@ name(pref + _name)
 
 module load R/3.1.0
 
-repeatsList=""
+repeatsList=${gap}" "
 
 for bed in ${repeats};
 do
