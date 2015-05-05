@@ -7,6 +7,7 @@ The pipeline expects to find [JIP pipeline system](https://github.com/thasso/pyj
 
 
 .. warning:: 
+    
     This package works properly using Python 2.7.5
 
 
