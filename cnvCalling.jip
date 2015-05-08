@@ -2,10 +2,9 @@
 # Run gemtools on a given input file with a preconfigured pipeline
 #
 # Usage:
-#    cnvCalling.jip -d <mapsDirectory> -c <canavarBinary> -r <referenceConf> -s <sampleDescription> -l <listJson> -o <output_dir> -n <name> [-p <prefix>]
+#    cnvCalling.jip -d <mapsDirectory> -r <referenceConf> -s <sampleDescription> -l <listJson> -o <output_dir> -n <name> [-p <prefix>]
 # 
 # Inputs:
-#  -c, --canavarBinary <canavarBinary>           Mr Canavar binary file
 #  -r, --referenceConf <referenceConf>           Reference configuration file from mrcanavar prep step
 #  -o, --output_dir <output_dir>                 Output directory
 #
@@ -36,5 +35,5 @@ add_output('html_doc',args['output_dir'] + "/html-doc/%s_html-doc.html" %args['n
 
 module load R/3.1.0
 
-gemtools-cnv cnv-call -d ${mapsDirectory} -mrcanavar-path ${canavarBinary} --conf_file ${referenceConf} --gz --no-duplications -sample-description ${sampleDescription} -n ${name} -o ${output_dir} -j ${listJson}
+gemtools-cnv cnv-call -d ${mapsDirectory} --conf_file ${referenceConf} --gz --no-duplications -sample-description ${sampleDescription} -n ${name} -o ${output_dir} -j ${listJson}
 

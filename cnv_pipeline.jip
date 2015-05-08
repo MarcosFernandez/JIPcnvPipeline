@@ -270,8 +270,8 @@ cnv_threads = cfg["CnvCalling"]["cnv_threads"]
 cnv_calling = job('cnv_calling_' + _name,time=cnv_time,threads=cnv_threads,\
     log=pathOutErr + "cnv_calling_" + sample + ".err",\
     out=pathOutErr + "cnv_calling_" + sample + ".out").\
-    run('cnvCalling',mapsDirectory=dir_out + "/map-sam/",canavarBinary="/home/devel/mfernand/bin/mrcanavar0.51",\
-    sampleDescription=args['description'],name=sample,referenceConf=cnv_conf,listJson=" ".join(jsonStatsList),output_dir=dir_out)
+    run('cnvCalling',mapsDirectory=dir_out + "/map-sam/",sampleDescription=args['description'],name=sample,\
+    referenceConf=cnv_conf,listJson=" ".join(jsonStatsList),output_dir=dir_out)
 
 for mapJob in cnv_mapping_jobs:
     cnv_calling.depends_on(mapJob)
